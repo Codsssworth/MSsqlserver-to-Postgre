@@ -36,8 +36,33 @@ ORDER BY
     s.name, t.name
 """)
 
+def map_dtype(dtype):
+    if dtype == 'int64':
+        return 'INTEGER'
+    elif dtype == 'float64':
+        return 'FLOAT'
+    elif dtype == 'object':
+        return 'TEXT'
+    elif dtype == 'datetime64[ns]':
+        return 'TIMESTAMP'
+    elif dtype == 'bool':
+        return 'BOOLEAN'
+    else:
+        return 'TEXT'  # Default to TEXT for unknown types
+
+
+def generate_create_table_sql(df, table_name):
+    columns = []
+    for column, dtype in df.dtypes.items():
+        sql_type = map_dtype( str( dtype ) )
+        columns.append( f'"{column}" {sql_type}' )
+
+    columns_sql = ",".join( columns )
+    create_table_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns_sql});"
+    return create_table_sql
+
 def ext():
-    # try:
+    try:
         connection = pyodbc.connect('DRIVER=' + driver + ';SERVER=' + server + ';DATABASE=' + db + ';Trusted_Connection = yes; ' )
         print(connection)
 
@@ -48,39 +73,44 @@ def ext():
         cursor.close()
 
         for t in tables:
-            print(t[0] ,t[1] )
+            tname=f"{t[0]}.{t[1]}"
             df = pd.read_sql_query(f'select * from {t[0]}.{t[1]};', connection)
-            print(df)
-            load(df , t)
-    # except Exception as e:
-    #     print("process failed")
-    # finally:
-    #     connection.close()
+            # print(df)
+            load(df , t ,tname)
+    except Exception as e:
+        print("process failed")
+    finally:
+        connection.close()
 
 
-def load(df,t):
-    r = 1
-    print("ree")
+def load(df,t,tname):
+     try:
+            s = create_schema_sql = f'''CREATE SCHEMA IF NOT EXISTS "{t[0]}";'''
+            sql = generate_create_table_sql( df, tname )
+            # print( s + sql )
+            # print( df )
+            s.lower()
+            engine2 = create_engine( f"postgresql://{user}:{pwd}@{host}:{port}/{db2}" )
+            connection=engine2.connect()
+            connection.execute(text(s.lower()+sql))
+            df.to_sql(name = tname,con=engine2  , index=False, if_exists='append')
+            print(f'table{ t} imported')
+            connection.commit()
+            connection.close()
 
-    # try:
-    engine2 = create_engine( f"postgresql://{user}:{pwd}@{host}:{port}/{db2}" )
-    connection=engine2.connect()
-    metadata = MetaData( )
-    # connection.execute( CREATE_ROOM)
-    # connection.execute( CREATE_TEMP )
-    connection.commit()
-    connection.close()
-
-    table = Table( 'rooms', metadata, autoload_with=engine2, schema='dbo' )
-    print(df)
-    # df.to_sql(name = 'rooms',con=engine  , if_exists='append')
-    print(f"table{ t} imported")
-
-    # except Exception as e:
-    #     print(e)
+     except Exception as e:
+        print(e)
 
 
-# try:
+
 ext()
+
+#debugg statements :)
+# print( s + sql )
+# print( df )
 # except Exception as e:
 #     print("error " + str(e))
+# metadata = MetaData( )
+# table = Table( 'rooms', metadata, autoload_with=engine2, schema='dbo' )
+# # connection.execute( CREATE_ROOM)
+# # connection.execute( CREATE_TEMP )
